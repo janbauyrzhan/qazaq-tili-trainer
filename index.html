@@ -7,9 +7,7 @@
   <meta name="theme-color" content="#102a43">
   <title>Til Bridge — тіл үйрену курсы</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="preload" href="fonts/NotoSans-Regular.woff" as="font" type="font/woff" crossorigin>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -28,8 +26,8 @@
     <nav class="main-nav" id="main-nav" aria-label="Негізгі мәзір">
       <a href="#home" data-nav="home">Басты бет</a>
       <a href="#path" data-nav="path">Курс</a>
-      <a href="#translator" data-nav="translator">Аударма</a>
-      <a href="#diagnostics" data-nav="diagnostics">Диагностика</a>
+      <a href="#translator" data-nav="translator">Сөздік</a>
+      <a href="#diagnostics" data-nav="diagnostics">Біліміңді тексер</a>
       <a href="#register" data-nav="register" class="nav-profile"><span>＋</span> Тіркелу</a>
     </nav>
   </header>
@@ -43,7 +41,7 @@
     </div>
     <div class="footer-links">
       <a href="#path">Толық курс</a>
-      <a href="#diagnostics">Диагностика</a>
+      <a href="#diagnostics">Біліміңді тексер</a>
       <a href="#register">Тіркелу / профиль</a>
     </div>
     <p class="copyright">© <span id="year"></span> Til Bridge</p>
@@ -51,6 +49,16 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <dialog id="welcome-dialog" aria-labelledby="welcome-title">
+    <form method="dialog"><button class="welcome-close" aria-label="Терезені жабу">×</button></form>
+    <span class="welcome-symbol" aria-hidden="true">Ә</span>
+    <span class="eyebrow">TIL BRIDGE · ҚОШ КЕЛДІҢ!</span>
+    <h2 id="welcome-title">Алғашқы қадамды<br>бірге жасайық.</h2>
+    <p>Есіміңді енгізіп, үйренетін тіліңді таңда.<br>Прогрессің осы браузерде сақталады.</p>
+    <a class="btn btn-primary" href="#register" id="welcome-start">Профиль жасау →</a>
+    <form method="dialog"><button class="welcome-guest">Алдымен курсты қараймын</button></form>
+    <small>Құпиясөзсіз · Тегін · Өз қарқыныңмен</small>
+  </dialog>
   <script src="data.js"></script>
   <script src="script.js"></script>
 </body>
