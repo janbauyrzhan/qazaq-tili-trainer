@@ -94,7 +94,7 @@ function renderTask() {
       <span class="task-badge">${task.type}</span>
       ${task.text ? `<div class="reading-text">${escapeHtml(task.text)}</div>` : ""}
       <h2 class="task-title">${escapeHtml(task.question)}</h2>
-      ${task.word && task.type !== "Тыңдап жаз" ? `<div class="task-word">${escapeHtml(task.word)}</div>` : ""}
+      ${task.word && task.type !== "Тыңдап жаз" && task.type !== "Сөйлем" ? `<div class="task-word">${escapeHtml(task.word)}</div>` : ""}
       ${task.type === "Тыңдап жаз" ? writingTemplate(task) : optionsTemplate(task)}
       <p class="feedback" id="feedback" role="status"></p>
     </div>`;
