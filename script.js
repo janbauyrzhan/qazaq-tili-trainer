@@ -5,6 +5,7 @@ const mainNav = document.querySelector("#main-nav");
 const toast = document.querySelector("#toast");
 const completionKey = "tilBridgeLessonProgress";
 const diagnosticKey = "tilBridgeLatestDiagnostic";
+const profileKey = "tilBridgeProfile";
 
 const appState = { diagnostic: null, toastTimer: null };
 
@@ -41,6 +42,7 @@ function renderRoute() {
   else if (route === "lesson") renderLesson(parts[1] || "kk", parts[2] || "letters", Number(parts[3] || 1));
   else if (route === "translator") renderTranslator();
   else if (route === "diagnostics") renderDiagnostics();
+  else if (route === "register") renderRegistration();
   else if (route === "project") renderProject();
   else renderNotFound();
 
@@ -72,6 +74,7 @@ function renderHome() {
             <a class="btn btn-primary" href="#path">Курсты көру <span>→</span></a>
             <a class="btn btn-secondary" href="#diagnostics">Деңгейді анықтау</a>
           </div>
+          <p class="hero-registration-link"><a href="#register">Алғаш рет кірдің бе? Профиль жасап, прогресті сақта →</a></p>
           <div class="hero-proof">
             <span><i></i> 3 негізгі модуль</span>
             <span><i></i> 2 тілдік бағыт</span>
@@ -206,6 +209,56 @@ function renderCourse(lang) {
   `, "course-page");
 }
 
+function renderRegistration() {
+  const profile = readJson(profileKey, null);
+  const selectedCourse = profile?.course || "kk";
+  const chosenCourse = selectedCourse === "both" ? "Екі тіл" : selectedCourse === "ru" ? "Русский язык" : "Қазақ тілі";
+  const progressCards = selectedCourse === "both" ? ["kk", "ru"] : [selectedCourse === "ru" ? "ru" : "kk"];
+  shell(`
+    ${pageBanner(profile ? "Жергілікті профиль" : "Бір минутта тіркел", profile ? `Қайта келдің, ${profile.name}` : "Оқуыңды өз браузеріңде сақта", "Аты-жөнің мен оқу бағытын енгіз. Аккаунт, құпиясөз және сервер қажет емес — мәліметтер тек осы құрылғыда сақталады.", "Тек осы браузерде")}
+    <section class="section">
+      <div class="container registration-layout">
+        <form class="registration-card" id="registration-form">
+          <span class="eyebrow">${profile ? "Профильді өзгерту" : "Оқушы профилі"}</span>
+          <label for="learner-name">Атың</label>
+          <input id="learner-name" name="name" type="text" maxlength="40" autocomplete="given-name" placeholder="Мысалы, Айдана" value="${profile ? escapeAttr(profile.name) : ""}" required>
+          <label for="learner-course">Қай тілді үйренесің?</label>
+          <select id="learner-course" name="course" required>
+            <option value="kk" ${selectedCourse === "kk" ? "selected" : ""}>Қазақ тілі</option>
+            <option value="ru" ${selectedCourse === "ru" ? "selected" : ""}>Русский язык</option>
+            <option value="both" ${selectedCourse === "both" ? "selected" : ""}>Екеуі де</option>
+          </select>
+          <button class="btn btn-primary registration-submit" type="submit">${profile ? "Сақтау және жалғастыру" : "Тіркелу және бастау"} <span>→</span></button>
+          <p class="local-note"><span>🔒</span> Профиль мен прогресс осы браузерде ғана сақталады. Басқа құрылғыда көрінбейді.</p>
+        </form>
+        <aside class="registration-side">
+          <span class="badge">${profile ? "Профиль сақталған" : "Қарапайым бастау"}</span>
+          <h2>${profile ? `Сәлем, ${escapeHtml(profile.name)}!` : "Аккаунт ашудың қажеті жоқ"}</h2>
+          <p>${profile ? `Оқу бағыты: ${chosenCourse}. Жалғастырған сабақтарың осы құрылғыда сақталады.` : "Тіркелгеннен кейін аяқтаған сабақтарың браузерде автоматты түрде белгіленіп, курс бетінде прогресс ретінде көрінеді."}</p>
+          ${profile ? `<div class="profile-progress-list">${progressCards.map(lang => {
+            const done = countCompleted(lang);
+            const total = countLessons(lang);
+            const title = lang === "kk" ? "Қазақ тілі" : "Русский язык";
+            return `<a href="#course/${lang}" class="profile-progress-item"><span><strong>${title}</strong><small>${done} / ${total} сабақ</small></span><span class="progress-mini"><i style="width:${Math.round(done / total * 100)}%"></i></span></a>`;
+          }).join("")}</div>` : `<ol class="registration-points"><li><span>1</span> Атыңды енгіз</li><li><span>2</span> Тіл бағытын таңда</li><li><span>3</span> Бірінші модульді баста</li></ol>`}
+          <a class="text-link" href="#path">Курстың үш модулін көру →</a>
+        </aside>
+      </div>
+    </section>
+  `, "registration-page");
+
+  document.querySelector("#registration-form").addEventListener("submit", event => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") || "").trim();
+    const course = String(form.get("course") || "kk");
+    if (!name) return;
+    localStorage.setItem(profileKey, JSON.stringify({ name, course, updatedAt: new Date().toISOString() }));
+    showToast("Профиль осы браузерде сақталды");
+    location.hash = course === "both" ? "#path" : `#course/${course}`;
+  });
+}
+
 function renderStage(lang, stageId) {
   lang = normalizeLanguage(lang);
   const isKk = lang === "kk";
@@ -253,6 +306,7 @@ function renderLesson(lang, stageId, number) {
           <div class="example-grid">
             ${current.examples.map(example => `<div class="example-card"><strong>${escapeHtml(example[0])}</strong><span class="han">${escapeHtml(example[1])}</span><button class="speak-button" type="button" data-action="speak" data-text="${escapeAttr(example[0])}" data-lang="${lang}">🔊</button></div>`).join("")}
           </div>
+          <p class="audio-note">Аудио құрылғыда орнатылған дауыс арқылы оқылады. Қажетті тілдің дауысы болмаса, сайт қате дыбыстаудың орнына дыбысты қоспайды.</p>
         </article>
         <article class="quiz-card" data-quiz data-lang="${lang}" data-stage="${stage.id}" data-lesson="${safeNumber}">
           <span class="eyebrow">${isKk ? "Өзіңді тексер" : "Проверь себя"}</span>
@@ -499,12 +553,23 @@ function speakTranslation() {
 }
 
 function speak(text, lang) {
-  if (!("speechSynthesis" in window) || !text) return showToast("Дыбыстау бұл браузерде қолжетімсіз");
-  window.speechSynthesis.cancel();
+  if (!("speechSynthesis" in window) || !text) return showToast("Бұл браузерде дыбыстау қолжетімсіз.");
+  const locale = lang === "zh" ? "zh-CN" : lang === "ru" ? "ru-RU" : "kk-KZ";
+  const prefix = locale.slice(0, 2).toLowerCase();
+  const synth = window.speechSynthesis;
+  const voices = synth.getVoices();
+  const voice = voices.find(item => item.lang.toLowerCase() === locale.toLowerCase())
+    || voices.find(item => item.lang.toLowerCase().startsWith(prefix));
+  if (!voice) {
+    const languageName = lang === "kk" ? "қазақша" : lang === "ru" ? "орысша" : "қытайша";
+    return showToast(`Бұл құрылғыда ${languageName} дауыс жоқ. Қате дыбыстау болмас үшін аудио қосылмады.`);
+  }
+  synth.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = lang === "zh" ? "zh-CN" : lang === "ru" ? "ru-RU" : "kk-KZ";
-  utterance.rate = 0.85;
-  window.speechSynthesis.speak(utterance);
+  utterance.voice = voice;
+  utterance.lang = voice.lang;
+  utterance.rate = 0.78;
+  synth.speak(utterance);
 }
 
 function nextStageHref(lang, stageId) {
