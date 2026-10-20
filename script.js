@@ -220,7 +220,7 @@ function renderLesson(lang, stageId, number, testing = false) {
       <h1>${escapeHtml(current.title)}</h1><p>${escapeHtml(current.summary)}</p>
       <div class="lesson-steps"><span class="${!testing ? "current" : ""}">01 · ${kk ? "Үйрену" : "Изучить"}</span><span class="${testing ? "current" : ""}">02 · ${kk ? "Өзіңді тексеру" : "Проверить себя"}</span></div>
     </section>
-    <section class="section lesson-section"><div class="container narrow">
+    <section class="section lesson-section"><div class="container lesson-workspace"><div class="lesson-main">
     ${testing ? '<div id="test-panel"></div>' : `
       <article class="lesson-content-card">
         <span class="eyebrow">${kk ? "НЕГІЗГІ ЕРЕЖЕ" : "ГЛАВНОЕ ПРАВИЛО"}</span>
@@ -239,8 +239,115 @@ function renderLesson(lang, stageId, number, testing = false) {
       <div class="study-finish"><div><strong>${kk ? "Дайынсың ба?" : "Готов проверить себя?"}</strong><p>${kk ? "Тексеру кезінде конспект көрсетілмейді." : "Во время проверки конспект будет скрыт."}</p></div>
         <a class="btn btn-primary" href="#test/${base}">${kk ? "Тестке өту" : "Перейти к тесту"} →</a></div>
     `}
-    </div></section>`, "lesson-page");
+    </div>${teacherChatMarkup(current, lang)}</div></section>`, "lesson-page");
   if (testing) renderTestPanel(current, lang, stage.id, n);
+  initializeTeacherChat(base, lang);
+}
+
+const teacherConversations = new Map();
+
+function teacherChatMarkup(lesson, lang) {
+  const kk = lang === "kk";
+  const suggestions = kk
+    ? ["Ережені қарапайым тілмен түсіндір", "Тағы бір мысал келтір", "Неден жиі қателеседі?"]
+    : ["Объясни правило проще", "Приведи ещё один пример", "Какие ошибки бывают чаще?"];
+  return `<aside class="teacher-chat" aria-labelledby="teacher-title" lang="${lang}">
+    <div class="teacher-header">
+      <span class="teacher-avatar" aria-hidden="true">✦</span>
+      <div><h2 id="teacher-title">${kk ? "ЖИ мұғалім" : "ИИ-учитель"}</h2><span class="teacher-status">${kk ? "Жақында қосылады" : "Скоро подключим"}</span></div>
+      <button class="teacher-toggle" type="button" aria-expanded="true" aria-controls="teacher-body" aria-label="${kk ? "Чатты жинау" : "Свернуть чат"}">−</button>
+    </div>
+    <div id="teacher-body">
+      <div class="teacher-topic"><span>${kk ? "Сабақ тақырыбы" : "Тема урока"}</span><strong>${escapeHtml(lesson.title)}</strong></div>
+      <div class="teacher-messages" role="log" aria-live="polite" aria-relevant="additions" aria-label="${kk ? "Чат хабарламалары" : "Сообщения чата"}" tabindex="0"></div>
+      <div class="teacher-suggestions" aria-label="${kk ? "Сұрақ үлгілері" : "Примеры вопросов"}">${suggestions.map(text => `<button type="button" class="teacher-suggestion">${text}</button>`).join("")}</div>
+      <form id="teacher-form" class="teacher-form">
+        <label for="teacher-question">${kk ? "Сұрағың" : "Твой вопрос"}</label>
+        <textarea id="teacher-question" rows="3" maxlength="800" placeholder="${kk ? "Не түсініксіз болды?" : "Что осталось непонятным?"}" aria-describedby="teacher-api-note"></textarea>
+        <div class="teacher-form-actions"><button class="teacher-clear" type="button">${kk ? "Тазалау" : "Очистить"}</button><button class="btn btn-primary btn-small" type="submit" disabled>${kk ? "Жіберу" : "Отправить"} ↑</button></div>
+      </form>
+      <p id="teacher-api-note" class="teacher-api-note">${kk ? "Әзірге чаттың интерфейсі ғана дайын. ЖИ қосылмаған: сұрақтар серверге жіберілмейді, жауап берілмейді." : "Пока готов только интерфейс. ИИ не подключён: вопросы не отправляются на сервер, ответы недоступны."}</p>
+    </div>
+  </aside>`;
+}
+
+function initializeTeacherChat(key, lang) {
+  const kk = lang === "kk";
+  if (!teacherConversations.has(key)) {
+    if (teacherConversations.size >= 32) teacherConversations.delete(teacherConversations.keys().next().value);
+    teacherConversations.set(key, { messages: [], draft: "" });
+  }
+  const conversation = teacherConversations.get(key);
+  const chat = document.querySelector(".teacher-chat");
+  const log = chat.querySelector(".teacher-messages");
+  const input = chat.querySelector("textarea");
+  const submit = chat.querySelector('[type="submit"]');
+  const welcome = kk
+    ? "Сәлем! Бұл жерде сабақ бойынша сұрақ қоя аласың. ЖИ-ді кейін қосамыз — әзірге жауап беру қолжетімсіз."
+    : "Привет! Здесь можно будет задавать вопросы по уроку. ИИ подключим позже — пока ответы недоступны.";
+  function bubble(text, role) {
+    const item = document.createElement("div");
+    item.className = `teacher-message teacher-message-${role}`;
+    const label = document.createElement("span");
+    label.textContent = role === "user" ? (kk ? "Сен" : "Ты") : (kk ? "Хабарлама" : "Уведомление");
+    const content = document.createElement("p");
+    content.textContent = text;
+    item.append(label, content);
+    log.append(item);
+  }
+  function renderHistory() {
+    log.replaceChildren();
+    bubble(welcome, "notice");
+    conversation.messages.forEach(item => bubble(item.text, item.role));
+    log.scrollTop = log.scrollHeight;
+  }
+  function updateDraft() {
+    conversation.draft = input.value;
+    submit.disabled = !input.value.trim();
+  }
+  renderHistory();
+  input.value = conversation.draft;
+  updateDraft();
+  input.addEventListener("input", updateDraft);
+  chat.querySelectorAll(".teacher-suggestion").forEach(button => button.addEventListener("click", () => {
+    input.value = button.textContent;
+    updateDraft();
+    input.focus();
+  }));
+  chat.querySelector("#teacher-form").addEventListener("submit", event => {
+    event.preventDefault();
+    const question = input.value.trim().slice(0, 800);
+    if (!question) return;
+    conversation.messages.push({ role: "user", text: question }, { role: "notice", text: kk
+      ? "ЖИ әлі қосылмаған. Сұрағың ешқайда жіберілген жоқ. Кейін қайта сұрауың керек болады; қазір сабақ конспектіне сүйен."
+      : "ИИ ещё не подключён. Вопрос никуда не отправлен. После подключения его нужно будет задать заново; пока обратись к конспекту урока." });
+    conversation.messages = conversation.messages.slice(-20);
+    input.value = "";
+    updateDraft();
+    renderHistory();
+    input.focus();
+  });
+  input.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      chat.querySelector("#teacher-form").requestSubmit();
+    }
+  });
+  chat.querySelector(".teacher-clear").addEventListener("click", () => {
+    conversation.messages = [];
+    input.value = "";
+    updateDraft();
+    renderHistory();
+    input.focus();
+  });
+  const toggle = chat.querySelector(".teacher-toggle");
+  toggle.addEventListener("click", () => {
+    const expanded = toggle.getAttribute("aria-expanded") !== "true";
+    toggle.setAttribute("aria-expanded", String(expanded));
+    toggle.setAttribute("aria-label", expanded ? (kk ? "Чатты жинау" : "Свернуть чат") : (kk ? "Чатты ашу" : "Развернуть чат"));
+    toggle.textContent = expanded ? "−" : "+";
+    chat.querySelector("#teacher-body").hidden = !expanded;
+  });
 }
 
 function renderTestPanel(lesson, lang, stage, number) {
