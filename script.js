@@ -227,8 +227,13 @@ function renderLesson(lang, stageId, number, testing = false) {
         <h2>${kk ? "Оқып, түсініп ал" : "Разберёмся вместе"}</h2>
         <p class="lesson-theory">${escapeHtml(current.theory)}</p>
         <div class="lesson-tip">${escapeHtml(current.note)}</div>
-        <h3>${kk ? "Мысалдарды салыстыр" : "Сравни примеры"}</h3>
-        <div class="example-grid">${current.examples.map(example => `<div class="example-card"><strong>${escapeHtml(example[0])}</strong><span>${escapeHtml(example[1])}</span>${stage.id !== "letters" ? `<button class="speak-button" type="button" data-action="speak" data-text="${escapeAttr(example[0])}" data-lang="${lang}" aria-label="${kk ? "Тыңдау:" : "Прослушать:"} ${escapeAttr(example[0])}">▷</button>` : ""}</div>`).join("")}</div>
+        <h3>${current.listening ? (kk ? "Сөйлемдерді тыңда" : "Прослушай предложения") : (kk ? "Мысалдарды салыстыр" : "Сравни примеры")}</h3>
+        ${current.listening ? `<div class="listening-grid">${current.examples.map((example, index) => `<div class="listening-card">
+          <span class="listening-number">${String(index + 1).padStart(2, "0")}</span>
+          <div><strong>${kk ? "Аудионы тыңда" : "Прослушай аудио"}</strong><small>${kk ? "Қажет болса, бірнеше рет тыңда." : "При необходимости прослушай несколько раз."}</small></div>
+          <audio controls preload="metadata" src="${escapeAttr(example[2])}" aria-label="${kk ? "Қазақша сөйлем" : "Русское предложение"} ${index + 1}"></audio>
+          <details><summary>${kk ? "Мәтінді тексеру" : "Проверить текст"}</summary><p><strong>${escapeHtml(example[0])}</strong><br>${escapeHtml(example[1])}</p></details>
+        </div>`).join("")}</div>` : `<div class="example-grid">${current.examples.map(example => `<div class="example-card"><strong>${escapeHtml(example[0])}</strong><span>${escapeHtml(example[1])}</span>${stage.id !== "letters" ? `<button class="speak-button" type="button" data-action="speak" data-text="${escapeAttr(example[0])}" data-lang="${lang}" aria-label="${kk ? "Тыңдау:" : "Прослушать:"} ${escapeAttr(example[0])}">▷</button>` : ""}</div>`).join("")}</div>`}
         <div class="practice-note"><strong>${kk ? "Кішкентай жаттығу" : "Небольшая практика"}</strong><p>${escapeHtml(current.practice)}</p></div>
         <details class="lesson-sources"><summary>${kk ? "Дереккөздер және дыбыстау туралы" : "Источники и озвучивание"}</summary>
           <p>${kk ? "Конспект қысқаша, өз сөзімізбен жазылған. Қосымша оқу:" : "Конспект изложен своими словами. Дополнительное чтение:"}</p>
@@ -398,6 +403,12 @@ function initializeTeacherChat(key, lang, testing) {
   });
 }
 
+function normalizeDictation(value, lang) {
+  const locale = lang === "kk" ? "kk-KZ" : "ru-RU";
+  return String(value || "").normalize("NFC").toLocaleLowerCase(locale)
+    .replace(/[.,!?…:;«»"'()]/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function renderTestPanel(lesson, lang, stage, number) {
   const session = appState.test, kk = lang === "kk";
   const panel = document.querySelector("#test-panel");
@@ -412,21 +423,38 @@ function renderTestPanel(lesson, lang, stage, number) {
     return;
   }
   const q = lesson.questions[session.index];
+  const dictation = q.type === "dictation";
   panel.innerHTML = `<article class="quiz-card"><div class="test-top"><span class="eyebrow">${kk ? "ӨЗІҢДІ ТЕКСЕР" : "ПРОВЕРЬ СЕБЯ"}</span><span>${session.index + 1} / ${lesson.questions.length}</span></div>
-    <h2>${escapeHtml(q.question)}</h2><p class="muted">${kk ? "Бір дұрыс жауапты таңда." : "Выбери один правильный ответ."}</p>
-    <div class="quiz-options">${q.options.map((option, i) => `<button class="quiz-option" data-option="${i}"><span class="option-index">${i + 1}</span>${escapeHtml(option)}</button>`).join("")}</div>
+    <h2>${escapeHtml(q.question)}</h2><p class="muted">${dictation ? (kk ? "Сөйлемді бірнеше рет тыңдауға болады." : "Аудио можно прослушать несколько раз.") : (kk ? "Бір дұрыс жауапты таңда." : "Выбери один правильный ответ.")}</p>
+    ${dictation ? `<div class="dictation-player"><span aria-hidden="true">♪</span><audio controls preload="metadata" src="${escapeAttr(q.audio)}" aria-label="${kk ? "Диктантқа арналған аудио" : "Аудио для диктанта"}"></audio></div>
+      <form class="dictation-form" id="dictation-form"><label for="dictation-answer">${kk ? "Естіген сөйлем" : "Услышанное предложение"}</label><input id="dictation-answer" name="answer" type="text" autocomplete="off" autocapitalize="sentences" spellcheck="false" required placeholder="${kk ? "Сөйлемді осында жаз" : "Напиши предложение здесь"}"><button class="btn btn-primary" type="submit">${kk ? "Тексеру" : "Проверить"}</button></form>` : `<div class="quiz-options">${q.options.map((option, i) => `<button class="quiz-option" data-option="${i}"><span class="option-index">${i + 1}</span>${escapeHtml(option)}</button>`).join("")}</div>`}
     <div class="quiz-feedback" role="status"></div><button class="btn btn-primary" id="test-next" hidden>${session.index + 1 === lesson.questions.length ? (kk ? "Нәтижені көру" : "Посмотреть результат") : (kk ? "Келесі сұрақ" : "Следующий вопрос")} →</button></article>`;
-  panel.querySelectorAll("[data-option]").forEach(button => button.addEventListener("click", () => {
+  function recordAnswer(correct) {
+    if (session.answers.length > session.index) return;
+    session.answers.push(correct);
+    panel.querySelector(".quiz-feedback").textContent = `${correct ? (kk ? "Дұрыс! " : "Верно! ") : (kk ? "Әзірге дұрыс емес. " : "Пока неверно. ")}${q.explanation}`;
+    panel.querySelector("#test-next").hidden = false;
+  }
+  if (dictation) {
+    panel.querySelector("#dictation-form").addEventListener("submit", event => {
+      event.preventDefault();
+      if (session.answers.length > session.index) return;
+      const input = panel.querySelector("#dictation-answer");
+      const correct = normalizeDictation(input.value, lang) === normalizeDictation(q.answer, lang);
+      input.disabled = true;
+      panel.querySelector("#dictation-form button").disabled = true;
+      input.classList.add(correct ? "correct" : "wrong");
+      recordAnswer(correct);
+    });
+  } else panel.querySelectorAll("[data-option]").forEach(button => button.addEventListener("click", () => {
     if (session.answers.length > session.index) return;
     const correct = q.options[Number(button.dataset.option)] === q.answer;
-    session.answers.push(correct);
     panel.querySelectorAll("[data-option]").forEach(el => {
       el.disabled = true;
       if (q.options[Number(el.dataset.option)] === q.answer) el.classList.add("correct");
       else if (el === button) el.classList.add("wrong");
     });
-    panel.querySelector(".quiz-feedback").textContent = `${correct ? (kk ? "Дұрыс! " : "Верно! ") : (kk ? "Әзірге дұрыс емес. " : "Пока неверно. ")}${q.explanation}`;
-    panel.querySelector("#test-next").hidden = false;
+    recordAnswer(correct);
   }));
   panel.querySelector("#test-next").addEventListener("click", () => {
     if (session.answers.length <= session.index) return;
@@ -510,7 +538,7 @@ function renderDiagnosticResult() {
 
 function renderProject() {
   shell(`
-    ${pageBanner("Жоба туралы", "Til Bridge қалай оқытады?", "Платформа қытай тілді оқушыға жаңа тілді шағын, түсінікті қадамдармен меңгеруге көмектеседі.", "Оқу әдістемесі")}
+    ${pageBanner("Жоба туралы", "QandasLab қалай оқытады?", "Платформа қытай тілді оқушыға жаңа тілді шағын, түсінікті қадамдармен меңгеруге көмектеседі.", "Оқу әдістемесі")}
     <section class="section"><div class="container">
       <div class="section-head center"><span class="eyebrow">Негізгі қағида</span><h2>Көру → қайталау → қолдану → тексеру</h2><p>Әр сабақ бір дағдыға бағытталады және бірден шағын тапсырмамен бекітіледі.</p></div>
       <div class="feature-grid">
@@ -572,10 +600,15 @@ function handleAction(event) {
 
 function startDiagnostic(lang = "kk") {
   lang = normalizeLanguage(lang);
-  const questions = data.stages.flatMap(stage => [0, data.lessons[lang][stage.id].length - 1].map(i => ({
-    ...data.lessons[lang][stage.id][i].questions[1], stage: stage.id,
-    topic: lang === "kk" ? stage.titleKk : stage.titleRu
-  })));
+  const questions = data.stages.flatMap(stage => {
+    const lessons = data.lessons[lang][stage.id];
+    const first = lessons[0].questions.find(question => Array.isArray(question.options));
+    const last = [...lessons].reverse().flatMap(lesson => lesson.questions).find(question => Array.isArray(question.options));
+    return [first, last].map(question => ({
+      ...question, stage: stage.id,
+      topic: lang === "kk" ? stage.titleKk : stage.titleRu
+    }));
+  });
   appState.diagnostic = { lang, questions, index: 0, correct: 0, answers: [], finished: false };
   renderDiagnosticQuestion();
 }
