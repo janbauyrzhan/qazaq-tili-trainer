@@ -6,6 +6,7 @@ const toast = document.querySelector("#toast");
 const completionKey = "tilBridgeLessonProgress";
 const diagnosticKey = "tilBridgeLatestDiagnostic";
 const diagnosticHistoryKey = "qandasLabDiagnosticHistory";
+const lessonHistoryKey = "qandasLabLessonHistory";
 const profileKey = "tilBridgeProfile";
 
 const appState = { diagnostic: null, toastTimer: null };
@@ -48,6 +49,7 @@ function renderRoute() {
   else if (route === "test") renderLesson(parts[1] || "kk", parts[2] || "letters", Number(parts[3] || 1), true);
   else if (route === "translator") renderTranslator();
   else if (route === "diagnostics") renderDiagnostics();
+  else if (route === "history") renderHistory();
   else if (route === "register") renderRegistration();
   else if (route === "project") renderProject();
   else renderNotFound();
@@ -212,7 +214,7 @@ function renderLesson(lang, stageId, number, testing = false) {
   const base = `${lang}/${stage.id}/${n}`;
   const source = data.sources[lang];
   if (testing && (!appState.test || appState.test.key !== base)) {
-    appState.test = { key: base, index: 0, answers: [], finished: false };
+    appState.test = { key: base, index: 0, answers: [], selectedAnswers: [], finished: false };
   }
   shell(`
     <section class="lesson-heading container narrow">
@@ -417,23 +419,29 @@ function renderTestPanel(lesson, lang, stage, number) {
   if (session.finished) {
     const score = session.answers.filter(Boolean).length, passed = score === lesson.questions.length;
     const next = number < data.lessons[lang][stage].length ? `#lesson/${lang}/${stage}/${number + 1}` : nextStageHref(lang, stage);
+    const mistakes = session.result?.mistakes || [];
     panel.innerHTML = `<article class="quiz-card result-hero"><span class="badge">${kk ? "НӘТИЖЕ" : "РЕЗУЛЬТАТ"}</span><div class="result-score">${score}/${lesson.questions.length}</div>
       <h2>${passed ? (kk ? "Жарайсың!" : "Отличная работа!") : (kk ? "Тағы бір рет қайталайық" : "Давай ещё немного потренируемся")}</h2>
       <p>${passed ? (kk ? "Барлық жауап дұрыс. Сабақ аяқталды." : "Все ответы верны. Урок завершён.") : (kk ? "Сабақты аяқтау үшін барлық сұраққа дұрыс жауап бер." : "Для завершения урока ответь верно на все вопросы.")}</p>
-      <div class="hero-actions"><button class="btn btn-secondary" data-action="retry-test">${kk ? "Қайта тексеру" : "Попробовать снова"}</button><a class="btn btn-primary" href="${passed ? next : `#lesson/${lang}/${stage}/${number}`}">${passed ? (kk ? "Жалғастыру" : "Продолжить") : (kk ? "Конспектке оралу" : "Вернуться к конспекту")} →</a></div></article>`;
+      ${mistakes.length ? `<div class="lesson-result-errors"><h3>${kk ? "Қателерің" : "Твои ошибки"}</h3>${mistakes.map(item => `<div><strong>${escapeHtml(item.question)}</strong><span>${kk ? "Сенің жауабың" : "Твой ответ"}: ${escapeHtml(item.selectedAnswer || "—")}</span><span>${kk ? "Дұрыс жауап" : "Правильный ответ"}: ${escapeHtml(item.correctAnswer)}</span></div>`).join("")}</div>` : ""}
+      <div class="hero-actions"><button class="btn btn-secondary" data-action="retry-test">${kk ? "Қайта тексеру" : "Попробовать снова"}</button><a class="btn btn-primary" href="${passed ? next : `#lesson/${lang}/${stage}/${number}`}">${passed ? (kk ? "Жалғастыру" : "Продолжить") : (kk ? "Конспектке оралу" : "Вернуться к конспекту")} →</a><a class="text-link" href="#history">${kk ? "Тарихты көру" : "Посмотреть историю"} ↗</a></div></article>`;
     return;
   }
   const q = lesson.questions[session.index];
   const dictation = q.type === "dictation";
   panel.innerHTML = `<article class="quiz-card"><div class="test-top"><span class="eyebrow">${kk ? "ӨЗІҢДІ ТЕКСЕР" : "ПРОВЕРЬ СЕБЯ"}</span><span>${session.index + 1} / ${lesson.questions.length}</span></div>
     <h2>${escapeHtml(q.question)}</h2><p class="muted">${dictation ? (kk ? "Сөйлемді бірнеше рет тыңдауға болады." : "Аудио можно прослушать несколько раз.") : (kk ? "Бір дұрыс жауапты таңда." : "Выбери один правильный ответ.")}</p>
-    ${dictation ? `<div class="dictation-player"><span aria-hidden="true">♪</span><audio controls preload="metadata" src="${escapeAttr(q.audio)}" aria-label="${kk ? "Диктантқа арналған аудио" : "Аудио для диктанта"}"></audio></div>
+    ${q.audio ? `<div class="dictation-player"><span aria-hidden="true">♪</span><audio controls preload="metadata" src="${escapeAttr(q.audio)}" aria-label="${kk ? "Тапсырмаға арналған аудио" : "Аудио для задания"}"></audio></div>` : ""}
+    ${dictation ? `
       <form class="dictation-form" id="dictation-form"><label for="dictation-answer">${kk ? "Естіген сөйлем" : "Услышанное предложение"}</label><input id="dictation-answer" name="answer" type="text" autocomplete="off" autocapitalize="sentences" spellcheck="false" required placeholder="${kk ? "Сөйлемді осында жаз" : "Напиши предложение здесь"}"><button class="btn btn-primary" type="submit">${kk ? "Тексеру" : "Проверить"}</button></form>` : `<div class="quiz-options">${q.options.map((option, i) => `<button class="quiz-option" data-option="${i}"><span class="option-index">${i + 1}</span>${escapeHtml(option)}</button>`).join("")}</div>`}
     <div class="quiz-feedback" role="status"></div><button class="btn btn-primary" id="test-next" hidden>${session.index + 1 === lesson.questions.length ? (kk ? "Нәтижені көру" : "Посмотреть результат") : (kk ? "Келесі сұрақ" : "Следующий вопрос")} →</button></article>`;
-  function recordAnswer(correct) {
+  function recordAnswer(correct, selectedAnswer) {
     if (session.answers.length > session.index) return;
     session.answers.push(correct);
-    panel.querySelector(".quiz-feedback").textContent = `${correct ? (kk ? "Дұрыс! " : "Верно! ") : (kk ? "Әзірге дұрыс емес. " : "Пока неверно. ")}${q.explanation}`;
+    session.selectedAnswers.push(selectedAnswer);
+    const feedback = panel.querySelector(".quiz-feedback");
+    feedback.classList.add(correct ? "correct" : "wrong");
+    feedback.textContent = `${correct ? (kk ? "Дұрыс! " : "Верно! ") : (kk ? "Қате. " : "Ошибка. ")}${q.explanation}`;
     panel.querySelector("#test-next").hidden = false;
   }
   if (dictation) {
@@ -445,7 +453,7 @@ function renderTestPanel(lesson, lang, stage, number) {
       input.disabled = true;
       panel.querySelector("#dictation-form button").disabled = true;
       input.classList.add(correct ? "correct" : "wrong");
-      recordAnswer(correct);
+      recordAnswer(correct, input.value.trim());
     });
   } else panel.querySelectorAll("[data-option]").forEach(button => button.addEventListener("click", () => {
     if (session.answers.length > session.index) return;
@@ -455,7 +463,7 @@ function renderTestPanel(lesson, lang, stage, number) {
       if (q.options[Number(el.dataset.option)] === q.answer) el.classList.add("correct");
       else if (el === button) el.classList.add("wrong");
     });
-    recordAnswer(correct);
+    recordAnswer(correct, q.options[Number(button.dataset.option)]);
   }));
   panel.querySelector("#test-next").addEventListener("click", () => {
     if (session.answers.length <= session.index) return;
@@ -463,6 +471,7 @@ function renderTestPanel(lesson, lang, stage, number) {
     if (session.index >= lesson.questions.length) {
       session.finished = true;
       if (session.answers.every(Boolean)) markLessonCompleted(lang, stage, number);
+      session.result = saveLessonAttempt(session, lesson, lang, stage, number);
     }
     renderTestPanel(lesson, lang, stage, number);
     panel.querySelector("h2").setAttribute("tabindex", "-1");
@@ -508,7 +517,7 @@ function renderDiagnostics() {
       <span class="badge">Әріптер → сөздер → сөйлемдер</span><h2 style="margin-top:22px">Қай тілді тексереміз?</h2>
       <p>Әр жауаптан кейін түсіндірмені оқып, келесі сұраққа өзің өтесің.</p>
       ${latest && typeof latest.percent === "number" ? `<p>Соңғы нәтиже: ${latest.lang === "ru" ? "Русский" : latest.lang === "kk" ? "Қазақша" : ""} · ${latest.percent}% · ${escapeHtml(latest.date)}</p>` : ""}
-      <div class="hero-actions"><button class="btn btn-primary" data-action="start-diagnostic" data-lang="kk">Қазақша →</button><button class="btn btn-secondary" data-action="start-diagnostic" data-lang="ru">Русский →</button></div>
+      <div class="hero-actions"><button class="btn btn-primary" data-action="start-diagnostic" data-lang="kk">Қазақша →</button><button class="btn btn-secondary" data-action="start-diagnostic" data-lang="ru">Русский →</button><a class="text-link" href="#history">Ваша история ↗</a></div>
     </div>${history.length ? renderDiagnosticAnalytics(history[history.length - 1], history, true) : ""}</div></section>`, "diagnostics-page");
 }
 
@@ -519,7 +528,7 @@ function renderDiagnosticQuestion() {
     <div class="test-top"><span class="eyebrow">${kk ? "БІЛІМІҢДІ ТЕКСЕР" : "ПРОВЕРЬ СВОИ ЗНАНИЯ"}</span><span>${session.index + 1} / ${session.questions.length}</span></div>
     <span class="badge">${item.topic}</span><h2 style="margin-top:20px">${escapeHtml(item.question)}</h2>
     <div class="diagnostic-options">${item.options.map(option => `<button class="diagnostic-answer" data-action="diagnostic-answer" data-answer="${escapeAttr(option)}">${escapeHtml(option)}</button>`).join("")}</div>
-    <p id="level-feedback" role="status"></p><button class="btn btn-primary" data-action="level-next" hidden>${kk ? "Жалғастыру" : "Продолжить"} →</button>
+    <p id="level-feedback" class="quiz-feedback" role="status"></p><button class="btn btn-primary" data-action="level-next" hidden>${kk ? "Жалғастыру" : "Продолжить"} →</button>
     <div style="margin-top:22px"><a href="#path" class="text-link">${kk ? "Курсқа оралу" : "Вернуться к курсу"}</a></div>
   </div></div></section>`, "diagnostic-active");
 }
@@ -536,7 +545,7 @@ function renderDiagnosticResult() {
     <h2>${weak ? (kk ? "Осы тақырыпты қайталап көр" : "Начни с повторения этой темы") : (kk ? "Жақсы бастама!" : "Отличное начало!")}</h2>
     <p>${kk ? target.titleKk : target.titleRu} · ${percent}%</p>
     <p>${kk ? "Бұл шағын тексеру тілді толық меңгеру деңгейін анықтамайды." : "Эта короткая проверка не определяет общий уровень владения языком."}</p>
-    <div class="hero-actions"><a class="btn btn-primary" href="#stage/${session.lang}/${target.id}">${kk ? "Модульге өту" : "Перейти к модулю"} →</a><button class="btn btn-secondary" data-action="restart-diagnostic" data-lang="${session.lang}">${kk ? "Қайта өту" : "Ещё раз"}</button></div>
+    <div class="hero-actions"><a class="btn btn-primary" href="#stage/${session.lang}/${target.id}">${kk ? "Модульге өту" : "Перейти к модулю"} →</a><button class="btn btn-secondary" data-action="restart-diagnostic" data-lang="${session.lang}">${kk ? "Қайта өту" : "Ещё раз"}</button><a class="text-link" href="#history">${kk ? "Барлық тарих" : "Вся история"} ↗</a></div>
   </div>${renderDiagnosticAnalytics(result, history)}</div></section>`, "diagnostic-result");
 }
 
@@ -573,6 +582,44 @@ function renderDiagnosticAnalytics(result, history, compact = false) {
       <p class="local-report-note">${kk ? "Журнал осы құрылғының браузерінде сақталады." : "Журнал хранится в браузере на этом устройстве."}</p>
     </section>
   </div>`;
+}
+
+function renderHistory() {
+  const lessonAttempts = readLessonHistory();
+  const diagnosticAttempts = readDiagnosticHistory();
+  const events = [
+    ...lessonAttempts.map(item => ({ ...item, kind: "lesson" })),
+    ...diagnosticAttempts.map(item => ({ ...item, kind: "diagnostic" }))
+  ].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  const successes = lessonAttempts.filter(item => item.passed).length;
+  const failures = lessonAttempts.length - successes;
+  const profile = getProfile();
+
+  shell(`${pageBanner("ВАША ИСТОРИЯ", profile ? `${profile.name}, вот ваши результаты` : "Успехи и ошибки по каждому уроку", "Здесь сохраняются попытки по урокам и общей диагностике. Можно увидеть, где всё получилось, а какие темы стоит повторить.", `${events.length} попыток`)}
+    <section class="section history-section"><div class="container">
+      <div class="history-summary">
+        <article><span>Всего попыток</span><strong>${lessonAttempts.length}</strong></article>
+        <article class="success"><span>Успешно</span><strong>${successes}</strong></article>
+        <article class="failure"><span>С ошибками</span><strong>${failures}</strong></article>
+        <article><span>Диагностик</span><strong>${diagnosticAttempts.length}</strong></article>
+      </div>
+      ${events.length ? `<div class="learning-history">${events.map(renderHistoryEvent).join("")}</div>` : `<div class="history-empty"><span aria-hidden="true">◎</span><h2>История пока пустая</h2><p>Пройдите тест после любого урока или общую диагностику — результат появится здесь автоматически.</p><div class="hero-actions"><a class="btn btn-primary" href="#path">Перейти к урокам →</a><a class="btn btn-secondary" href="#diagnostics">Пройти диагностику</a></div></div>`}
+      <p class="local-report-note">История хранится только в этом браузере. Профиль и пароль для этого не нужны.</p>
+    </div></section>`, "history-page");
+}
+
+function renderHistoryEvent(item) {
+  const isLesson = item.kind === "lesson";
+  const mistakes = Array.isArray(item.mistakes) ? item.mistakes : [];
+  const success = isLesson ? item.passed : item.percent >= 70;
+  const title = isLesson ? item.lessonTitle : (item.lang === "kk" ? "Общая диагностика по казахскому" : "Общая диагностика по русскому");
+  const subtitle = isLesson ? `${item.lang === "kk" ? "Қазақша" : "Русский"} · ${item.stageTitle || "Урок"}` : `${item.correct}/${item.total || 6} правильных ответов`;
+  return `<article class="history-event ${success ? "success" : "failure"}">
+    <div class="history-event-top"><span class="history-status">${success ? "✓ Успех" : "! Есть ошибки"}</span><time>${escapeHtml(item.date || "")}</time></div>
+    <div class="history-event-main"><div><span class="eyebrow">${isLesson ? "ТЕСТ УРОКА" : "ДИАГНОСТИКА"}</span><h2>${escapeHtml(title || "Результат")}</h2><p>${escapeHtml(subtitle)}</p></div><strong class="history-score">${item.percent}%</strong></div>
+    ${mistakes.length ? `<div class="history-errors"><h3>Ошибки (${mistakes.length})</h3>${mistakes.map(mistake => `<div class="history-error"><strong>${escapeHtml(mistake.question)}</strong><span>Ваш ответ: ${escapeHtml(mistake.selectedAnswer || "—")}</span><span>Правильный ответ: ${escapeHtml(mistake.correctAnswer)}</span></div>`).join("")}</div>` : `<div class="history-perfect">Все ответы правильные.</div>`}
+    ${isLesson ? `<a class="text-link" href="#lesson/${item.lang}/${item.stage}/${item.lessonNumber}">Открыть урок →</a>` : `<a class="text-link" href="#diagnostics">Открыть диагностику →</a>`}
+  </article>`;
 }
 
 function renderProject() {
@@ -665,7 +712,9 @@ function answerDiagnostic(answer) {
     if (button.dataset.answer === current.answer) button.style.cssText = "border-color:#59936b;background:#eaf5ee";
     else if (button.dataset.answer === answer) button.style.cssText = "border-color:#cf8c80;background:#fff0ed";
   });
-  document.querySelector("#level-feedback").textContent = current.explanation;
+  const feedback = document.querySelector("#level-feedback");
+  feedback.classList.add(correct ? "correct" : "wrong");
+  feedback.textContent = `${correct ? (session.lang === "kk" ? "Дұрыс! " : "Верно! ") : (session.lang === "kk" ? "Қате. " : "Ошибка. ")}${current.explanation}`;
   document.querySelector("[data-action=level-next]").hidden = false;
 }
 
@@ -682,6 +731,46 @@ function nextDiagnosticQuestion() {
     saveJson(diagnosticHistoryKey, [...history, record].slice(-30));
     renderDiagnosticResult();
   } else renderDiagnosticQuestion();
+}
+
+function readLessonHistory() {
+  const history = readJson(lessonHistoryKey, []);
+  return Array.isArray(history) ? history.filter(item => item && item.kind !== "diagnostic" && typeof item.percent === "number") : [];
+}
+
+function saveLessonAttempt(session, lesson, lang, stageId, lessonNumber) {
+  const history = readLessonHistory();
+  const kk = lang === "kk";
+  const correct = session.answers.filter(Boolean).length;
+  const total = lesson.questions.length;
+  const stage = data.stages.find(item => item.id === stageId);
+  const mistakes = lesson.questions.reduce((items, question, index) => {
+    if (session.answers[index]) return items;
+    items.push({
+      question: question.question,
+      selectedAnswer: session.selectedAnswers[index] || "",
+      correctAnswer: question.answer
+    });
+    return items;
+  }, []);
+  const record = {
+    id: `${Date.now()}-${lang}-${stageId}-${lessonNumber}`,
+    createdAt: new Date().toISOString(),
+    date: new Date().toLocaleString(kk ? "kk-KZ" : "ru-RU", { dateStyle: "short", timeStyle: "short" }),
+    student: getProfile()?.name || (kk ? "Оқушы" : "Ученик"),
+    lang,
+    stage: stageId,
+    stageTitle: kk ? stage?.titleKk : stage?.titleRu,
+    lessonNumber,
+    lessonTitle: lesson.title,
+    correct,
+    total,
+    percent: Math.round(correct / total * 100),
+    passed: correct === total,
+    mistakes
+  };
+  saveJson(lessonHistoryKey, [...history, record].slice(-100));
+  return record;
 }
 
 function readDiagnosticHistory() {

@@ -223,6 +223,24 @@
   lessons.kk.letters[0].theory = "А — жуан, Ә — жіңішке дауысты дыбыс. Екі әріптің пішінін және сөздердегі жазылуын салыстыр.";
   lessons.ru.letters[0].theory = "А и О — гласные буквы. Сравни их написание и найди первую букву в словах арбуз и окно.";
   lessons.kk.words[0].examples[2][1] = "奶奶 / 外婆";
+  function makeExampleQuestion(lang, stageId, item, lessonIndex, exampleIndex) {
+    const example = item.examples[exampleIndex] || item.examples[0];
+    const answer = stageId === "letters" ? String(example[1]).split(" /")[0] : example[0];
+    const cue = stageId === "letters" ? example[0] : example[1];
+    const candidates = lessons[lang][stageId].flatMap(lessonItem => lessonItem.examples.slice(0, 2).map(value => stageId === "letters" ? String(value[1]).split(" /")[0] : value[0]));
+    const distractors = [...new Set(candidates)].filter(value => value !== answer);
+    const first = distractors[(lessonIndex * 2 + exampleIndex) % distractors.length];
+    const second = distractors[(lessonIndex * 2 + exampleIndex + 3) % distractors.length] || distractors[0];
+    const baseOptions = [answer, first, second].filter((value, index, values) => value && values.indexOf(value) === index);
+    const options = baseOptions.length === 3
+      ? [baseOptions[(lessonIndex + exampleIndex) % 3], baseOptions[(lessonIndex + exampleIndex + 1) % 3], baseOptions[(lessonIndex + exampleIndex + 2) % 3]]
+      : [answer, ...item.quiz.options.filter(value => value !== answer)].slice(0, 3);
+    const question = stageId === "letters"
+      ? (lang === "kk" ? `«${cue}» әрпінен басталатын сөзді таңда.` : `Выбери слово на букву «${cue}».`)
+      : (lang === "kk" ? `«${cue}» үлгісіне сәйкес жауапты таңда.` : `Выбери вариант, который соответствует «${cue}».`);
+    const explanation = lang === "kk" ? `Дұрыс жауап: ${answer}.` : `Правильный ответ: ${answer}.`;
+    return { question, options, answer, explanation };
+  }
   for (const lang of ["kk", "ru"]) {
     for (const stage of stages) {
       lessons[lang][stage.id].forEach((item, index) => {
@@ -231,7 +249,12 @@
           ? (stage.id === "letters" ? "Әр жұпты қағазға жаз. Айырмашылығын белгіле. Содан кейін мысалдағы сөздерді көшіріп жаз." : stage.id === "words" ? "Мысалдарды оқы. Аударманы қолыңмен жауып, мағынасын еске түсір. Әр сөзді бір рет жаз." : "Мысалдан кім және қандай қимыл туралы айтылғанын тап. Сол үлгімен өз сөйлеміңді жаз.")
           : (stage.id === "letters" ? "Напиши каждую пару на бумаге. Отметь различия. Затем перепиши слова из примеров." : stage.id === "words" ? "Прочитай примеры. Закрой перевод и вспомни значение каждого слова. Запиши слова по одному разу." : "Найди в примере, кто выполняет действие и какое. Запиши своё предложение по той же схеме.");
         const [question, options, answer, explanation] = checks[lang][stage.id][index];
-        item.questions = [item.quiz, { question, options, answer, explanation }];
+        item.questions = [
+          item.quiz,
+          { question, options, answer, explanation },
+          makeExampleQuestion(lang, stage.id, item, index, 0),
+          makeExampleQuestion(lang, stage.id, item, index, 1)
+        ];
       });
     }
   }
@@ -249,7 +272,29 @@
   for (const lang of ["kk", "ru"]) {
     const listeningLesson = lessons[lang].sentences.at(-1);
     listeningLesson.listening = true;
-    listeningLesson.questions = listeningQuestions[lang];
+    const [first, second] = listeningQuestions[lang];
+    const firstAnswer = lang === "kk" ? "Мен қазақ тілін үйренемін." : "Я изучаю русский язык.";
+    const secondAnswer = lang === "kk" ? "Ол мектепке барады." : "Он читает книгу.";
+    listeningLesson.questions = [
+      first,
+      second,
+      {
+        type: "listening-choice",
+        question: lang === "kk" ? "Аудиодағы сөйлемді таңда." : "Выбери предложение из аудио.",
+        audio: first.audio,
+        options: [secondAnswer, firstAnswer, lang === "kk" ? "Мен кітап оқимын." : "Она идёт в школу."],
+        answer: firstAnswer,
+        explanation: lang === "kk" ? `Дұрыс жауап: ${firstAnswer}` : `Правильный ответ: ${firstAnswer}`
+      },
+      {
+        type: "listening-choice",
+        question: lang === "kk" ? "Келесі аудиодағы сөйлемді таңда." : "Выбери предложение из следующего аудио.",
+        audio: second.audio,
+        options: [lang === "kk" ? "Ол кітап оқиды." : "Я пишу письмо.", secondAnswer, firstAnswer],
+        answer: secondAnswer,
+        explanation: lang === "kk" ? `Дұрыс жауап: ${secondAnswer}` : `Правильный ответ: ${secondAnswer}`
+      }
+    ];
   }
 
   const appData = { lessons, stages, diagnostics, dictionary, sources };
