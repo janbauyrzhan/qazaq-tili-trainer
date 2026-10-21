@@ -517,7 +517,7 @@ function renderDiagnostics() {
       <span class="badge">Әріптер → сөздер → сөйлемдер</span><h2 style="margin-top:22px">Қай тілді тексереміз?</h2>
       <p>Әр жауаптан кейін түсіндірмені оқып, келесі сұраққа өзің өтесің.</p>
       ${latest && typeof latest.percent === "number" ? `<p>Соңғы нәтиже: ${latest.lang === "ru" ? "Русский" : latest.lang === "kk" ? "Қазақша" : ""} · ${latest.percent}% · ${escapeHtml(latest.date)}</p>` : ""}
-      <div class="hero-actions"><button class="btn btn-primary" data-action="start-diagnostic" data-lang="kk">Қазақша →</button><button class="btn btn-secondary" data-action="start-diagnostic" data-lang="ru">Русский →</button><a class="text-link" href="#history">Ваша история ↗</a></div>
+      <div class="hero-actions"><button class="btn btn-primary" data-action="start-diagnostic" data-lang="kk">Қазақша →</button><button class="btn btn-secondary" data-action="start-diagnostic" data-lang="ru">Русский →</button><a class="text-link" href="#history">Сіздің диагностикаңыз ↗</a></div>
     </div>${history.length ? renderDiagnosticAnalytics(history[history.length - 1], history, true) : ""}</div></section>`, "diagnostics-page");
 }
 
@@ -595,16 +595,16 @@ function renderHistory() {
   const failures = lessonAttempts.length - successes;
   const profile = getProfile();
 
-  shell(`${pageBanner("ВАША ИСТОРИЯ", profile ? `${profile.name}, вот ваши результаты` : "Успехи и ошибки по каждому уроку", "Здесь сохраняются попытки по урокам и общей диагностике. Можно увидеть, где всё получилось, а какие темы стоит повторить.", `${events.length} попыток`)}
+  shell(`${pageBanner("ОҚУ НӘТИЖЕЛЕРІ", "Сіздің диагностикаңыз", `${profile ? `${profile.name}, ` : ""}мұнда әр сабақтың тесті мен жалпы диагностика нәтижелері сақталады. Жетістіктеріңізді және қай тақырыптарды қайталау керегін көре аласыз.`, `${events.length} әрекет`)}
     <section class="section history-section"><div class="container">
       <div class="history-summary">
-        <article><span>Всего попыток</span><strong>${lessonAttempts.length}</strong></article>
-        <article class="success"><span>Успешно</span><strong>${successes}</strong></article>
-        <article class="failure"><span>С ошибками</span><strong>${failures}</strong></article>
-        <article><span>Диагностик</span><strong>${diagnosticAttempts.length}</strong></article>
+        <article><span>Барлық әрекет</span><strong>${lessonAttempts.length}</strong></article>
+        <article class="success"><span>Сәтті</span><strong>${successes}</strong></article>
+        <article class="failure"><span>Қателер бар</span><strong>${failures}</strong></article>
+        <article><span>Диагностика</span><strong>${diagnosticAttempts.length}</strong></article>
       </div>
-      ${events.length ? `<div class="learning-history">${events.map(renderHistoryEvent).join("")}</div>` : `<div class="history-empty"><span aria-hidden="true">◎</span><h2>История пока пустая</h2><p>Пройдите тест после любого урока или общую диагностику — результат появится здесь автоматически.</p><div class="hero-actions"><a class="btn btn-primary" href="#path">Перейти к урокам →</a><a class="btn btn-secondary" href="#diagnostics">Пройти диагностику</a></div></div>`}
-      <p class="local-report-note">История хранится только в этом браузере. Профиль и пароль для этого не нужны.</p>
+      ${events.length ? `<div class="learning-history">${events.map(renderHistoryEvent).join("")}</div>` : `<div class="history-empty"><span aria-hidden="true">◎</span><h2>Нәтиже әзірге жоқ</h2><p>Кез келген сабақтың тестін немесе жалпы диагностиканы өтіңіз — нәтиже осы жерде автоматты түрде пайда болады.</p><div class="hero-actions"><a class="btn btn-primary" href="#path">Сабақтарға өту →</a><a class="btn btn-secondary" href="#diagnostics">Диагностикадан өту</a></div></div>`}
+      <p class="local-report-note">Нәтижелер осы браузерде ғана сақталады. Профиль мен құпиясөз қажет емес.</p>
     </div></section>`, "history-page");
 }
 
@@ -612,13 +612,13 @@ function renderHistoryEvent(item) {
   const isLesson = item.kind === "lesson";
   const mistakes = Array.isArray(item.mistakes) ? item.mistakes : [];
   const success = isLesson ? item.passed : item.percent >= 70;
-  const title = isLesson ? item.lessonTitle : (item.lang === "kk" ? "Общая диагностика по казахскому" : "Общая диагностика по русскому");
-  const subtitle = isLesson ? `${item.lang === "kk" ? "Қазақша" : "Русский"} · ${item.stageTitle || "Урок"}` : `${item.correct}/${item.total || 6} правильных ответов`;
+  const title = isLesson ? item.lessonTitle : (item.lang === "kk" ? "Қазақ тілі бойынша жалпы диагностика" : "Орыс тілі бойынша жалпы диагностика");
+  const subtitle = isLesson ? `${item.lang === "kk" ? "Қазақша" : "Орысша"} · ${item.stageTitle || "Сабақ"}` : `${item.correct}/${item.total || 6} дұрыс жауап`;
   return `<article class="history-event ${success ? "success" : "failure"}">
-    <div class="history-event-top"><span class="history-status">${success ? "✓ Успех" : "! Есть ошибки"}</span><time>${escapeHtml(item.date || "")}</time></div>
-    <div class="history-event-main"><div><span class="eyebrow">${isLesson ? "ТЕСТ УРОКА" : "ДИАГНОСТИКА"}</span><h2>${escapeHtml(title || "Результат")}</h2><p>${escapeHtml(subtitle)}</p></div><strong class="history-score">${item.percent}%</strong></div>
-    ${mistakes.length ? `<div class="history-errors"><h3>Ошибки (${mistakes.length})</h3>${mistakes.map(mistake => `<div class="history-error"><strong>${escapeHtml(mistake.question)}</strong><span>Ваш ответ: ${escapeHtml(mistake.selectedAnswer || "—")}</span><span>Правильный ответ: ${escapeHtml(mistake.correctAnswer)}</span></div>`).join("")}</div>` : `<div class="history-perfect">Все ответы правильные.</div>`}
-    ${isLesson ? `<a class="text-link" href="#lesson/${item.lang}/${item.stage}/${item.lessonNumber}">Открыть урок →</a>` : `<a class="text-link" href="#diagnostics">Открыть диагностику →</a>`}
+    <div class="history-event-top"><span class="history-status">${success ? "✓ Сәтті" : "! Қателер бар"}</span><time>${escapeHtml(item.date || "")}</time></div>
+    <div class="history-event-main"><div><span class="eyebrow">${isLesson ? "САБАҚ ТЕСТІ" : "ДИАГНОСТИКА"}</span><h2>${escapeHtml(title || "Нәтиже")}</h2><p>${escapeHtml(subtitle)}</p></div><strong class="history-score">${item.percent}%</strong></div>
+    ${mistakes.length ? `<div class="history-errors"><h3>Қателер (${mistakes.length})</h3>${mistakes.map(mistake => `<div class="history-error"><strong>${escapeHtml(mistake.question)}</strong><span>Сіздің жауабыңыз: ${escapeHtml(mistake.selectedAnswer || "—")}</span><span>Дұрыс жауап: ${escapeHtml(mistake.correctAnswer)}</span></div>`).join("")}</div>` : `<div class="history-perfect">Барлық жауап дұрыс.</div>`}
+    ${isLesson ? `<a class="text-link" href="#lesson/${item.lang}/${item.stage}/${item.lessonNumber}">Сабақты ашу →</a>` : `<a class="text-link" href="#diagnostics">Диагностиканы ашу →</a>`}
   </article>`;
 }
 
