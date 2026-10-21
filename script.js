@@ -5,6 +5,7 @@ const mainNav = document.querySelector("#main-nav");
 const toast = document.querySelector("#toast");
 const completionKey = "tilBridgeLessonProgress";
 const diagnosticKey = "tilBridgeLatestDiagnostic";
+const diagnosticHistoryKey = "qandasLabDiagnosticHistory";
 const profileKey = "tilBridgeProfile";
 
 const appState = { diagnostic: null, toastTimer: null };
@@ -501,13 +502,14 @@ function renderDiagnostics() {
   if (appState.diagnostic?.finished) return renderDiagnosticResult();
   if (appState.diagnostic) return renderDiagnosticQuestion();
   const latest = readJson(diagnosticKey, null);
+  const history = readDiagnosticHistory();
   shell(`${pageBanner("Біліміңді тексер", "Қай жерден бастаймыз?", "Тілді таңда. 6 қысқа сұрақ таныс тақырыптарды анықтауға көмектеседі. Бұл ресми деңгей емтиханы емес.", "Шамамен 3 минут")}
     <section class="section"><div class="container diagnostic-shell"><div class="diagnostic-card result-hero">
       <span class="badge">Әріптер → сөздер → сөйлемдер</span><h2 style="margin-top:22px">Қай тілді тексереміз?</h2>
       <p>Әр жауаптан кейін түсіндірмені оқып, келесі сұраққа өзің өтесің.</p>
       ${latest && typeof latest.percent === "number" ? `<p>Соңғы нәтиже: ${latest.lang === "ru" ? "Русский" : latest.lang === "kk" ? "Қазақша" : ""} · ${latest.percent}% · ${escapeHtml(latest.date)}</p>` : ""}
       <div class="hero-actions"><button class="btn btn-primary" data-action="start-diagnostic" data-lang="kk">Қазақша →</button><button class="btn btn-secondary" data-action="start-diagnostic" data-lang="ru">Русский →</button></div>
-    </div></div></section>`, "diagnostics-page");
+    </div>${history.length ? renderDiagnosticAnalytics(history[history.length - 1], history, true) : ""}</div></section>`, "diagnostics-page");
 }
 
 function renderDiagnosticQuestion() {
@@ -527,13 +529,50 @@ function renderDiagnosticResult() {
   const percent = Math.round(session.correct / session.questions.length * 100);
   const weak = data.stages.find(stage => session.answers.some((a, index) => !a && session.questions[index].stage === stage.id));
   const target = weak || data.stages[2];
+  const history = readDiagnosticHistory();
+  const result = session.result || history[history.length - 1] || createDiagnosticRecord(session, history);
   shell(`<section class="section"><div class="container diagnostic-shell"><div class="diagnostic-card result-hero">
     <span class="badge">${kk ? "Тексеру аяқталды" : "Проверка завершена"}</span><div class="result-score">${session.correct}/${session.questions.length}</div>
     <h2>${weak ? (kk ? "Осы тақырыпты қайталап көр" : "Начни с повторения этой темы") : (kk ? "Жақсы бастама!" : "Отличное начало!")}</h2>
     <p>${kk ? target.titleKk : target.titleRu} · ${percent}%</p>
     <p>${kk ? "Бұл шағын тексеру тілді толық меңгеру деңгейін анықтамайды." : "Эта короткая проверка не определяет общий уровень владения языком."}</p>
     <div class="hero-actions"><a class="btn btn-primary" href="#stage/${session.lang}/${target.id}">${kk ? "Модульге өту" : "Перейти к модулю"} →</a><button class="btn btn-secondary" data-action="restart-diagnostic" data-lang="${session.lang}">${kk ? "Қайта өту" : "Ещё раз"}</button></div>
-  </div></div></section>`, "diagnostic-result");
+  </div>${renderDiagnosticAnalytics(result, history)}</div></section>`, "diagnostic-result");
+}
+
+function renderDiagnosticAnalytics(result, history, compact = false) {
+  if (!result || !Array.isArray(result.stats)) return "";
+  const kk = result.lang === "kk";
+  const sameLanguage = history.filter(item => item.lang === result.lang && typeof item.percent === "number").slice(-8);
+  const change = Number(result.change) || 0;
+  const changeText = result.previousPercent == null
+    ? (kk ? "Алғашқы нәтиже" : "Первый результат")
+    : `${change > 0 ? "+" : ""}${change}%`;
+  const changeClass = change > 0 ? "positive" : change < 0 ? "negative" : "neutral";
+  const mistakes = Array.isArray(result.mistakes) ? result.mistakes : [];
+  const journal = history.slice(-10).reverse();
+  const student = escapeHtml(result.student || (kk ? "Оқушы" : "Ученик"));
+
+  return `<div class="diagnostic-report${compact ? " compact" : ""}">
+    <section class="report-section" id="research-results">
+      <div class="report-heading"><div><span class="eyebrow">${kk ? "ЗЕРТТЕУ НӘТИЖЕЛЕРІ" : "РЕЗУЛЬТАТЫ ИССЛЕДОВАНИЯ"}</span><h2>${kk ? "Нәтижелер динамикасы" : "Динамика результатов"}</h2></div><span class="change-badge ${changeClass}">${changeText}</span></div>
+      <p>${student} · ${result.lang === "ru" ? "Русский" : "Қазақша"}. ${kk ? "Әр жаңа диагностика алдыңғы нәтижемен салыстырылады." : "Каждая новая диагностика сравнивается с предыдущей."}</p>
+      <div class="history-chart" aria-label="${kk ? "Соңғы нәтижелер диаграммасы" : "Диаграмма последних результатов"}">
+        ${sameLanguage.map((item, index) => `<div class="history-column${item.id === result.id ? " current" : ""}"><span class="history-value">${item.percent}%</span><div class="history-track"><span style="height:${Math.max(5, item.percent)}%"></span></div><small>${sameLanguage.length === 1 ? (kk ? "Қазір" : "Сейчас") : index + 1}</small></div>`).join("")}
+      </div>
+      <div class="module-results">${result.stats.map(stat => `<article class="module-result"><div><strong>${escapeHtml(stat.title)}</strong><span>${stat.correct}/${stat.total} · ${stat.percent}%</span></div><div class="progress-line"><span style="width:${stat.percent}%"></span></div></article>`).join("")}</div>
+      ${mistakes.length ? `<div class="mistake-panel"><h3>${kk ? "Қай тақырыптарды қайталау керек?" : "Какие темы нужно повторить?"}</h3><div class="mistake-list">${mistakes.map(item => `<article><div><span>${escapeHtml(item.topic)}</span><strong>${escapeHtml(item.question)}</strong><small>${kk ? "Сіздің жауабыңыз" : "Ваш ответ"}: ${escapeHtml(item.selectedAnswer || "—")} · ${kk ? "Дұрыс жауап" : "Правильный ответ"}: ${escapeHtml(item.correctAnswer)}</small></div><a class="btn btn-soft btn-small" href="#stage/${result.lang}/${item.stage}">${kk ? "Қайталау" : "Повторить"} →</a></article>`).join("")}</div></div>` : `<div class="perfect-result">✓ ${kk ? "Қате жоқ. Барлық модуль бойынша жауаптар дұрыс." : "Ошибок нет. Все ответы по модулям верны."}</div>`}
+    </section>
+    <section class="report-section" id="research-journal">
+      <div class="report-heading"><div><span class="eyebrow">${kk ? "ЗЕРТТЕУ ЖУРНАЛЫ" : "ЖУРНАЛ ИССЛЕДОВАНИЯ"}</span><h2>${kk ? "Диагностика журналы" : "Журнал диагностики"}</h2></div><span class="badge">${history.length} ${kk ? "жазба" : "зап."}</span></div>
+      <div class="journal-table-wrap"><table class="journal-table"><thead><tr><th>${kk ? "Күні" : "Дата"}</th><th>${kk ? "Оқушы" : "Ученик"}</th><th>${kk ? "Тіл" : "Язык"}</th><th>${kk ? "Нәтиже" : "Результат"}</th><th>${kk ? "Қате" : "Ошибки"}</th><th>${kk ? "Өзгеріс" : "Изменение"}</th></tr></thead><tbody>${journal.map(item => {
+        const itemChange = Number(item.change) || 0;
+        const delta = item.previousPercent == null ? "—" : `${itemChange > 0 ? "+" : ""}${itemChange}%`;
+        return `<tr><td>${escapeHtml(item.date)}</td><td>${escapeHtml(item.student || (kk ? "Оқушы" : "Ученик"))}</td><td>${item.lang === "ru" ? "RU" : "KZ"}</td><td><strong>${item.percent}%</strong></td><td>${Number(item.total || 6) - Number(item.correct || 0)}</td><td class="delta ${itemChange > 0 ? "positive" : itemChange < 0 ? "negative" : ""}">${delta}</td></tr>`;
+      }).join("")}</tbody></table></div>
+      <p class="local-report-note">${kk ? "Журнал осы құрылғының браузерінде сақталады." : "Журнал хранится в браузере на этом устройстве."}</p>
+    </section>
+  </div>`;
 }
 
 function renderProject() {
@@ -546,7 +585,7 @@ function renderProject() {
         <article class="feature-card"><span class="feature-icon">02</span><h3>Сөздер</h3><p>Отбасы, мектеп, түс және күнделікті әрекеттер арқылы негізгі сөздік қор құру.</p></article>
         <article class="feature-card"><span class="feature-icon">03</span><h3>Сөйлемдер</h3><p>Сөз тәртібін түсініп, өз ойын қысқа әрі грамматикалық дұрыс сөйлеммен жеткізу.</p></article>
       </div>
-      <div class="research-note"><strong>Деректер туралы:</strong> сайт жеке оқушының мәліметтерін жинамайды. Сабақ прогресі мен соңғы тексеру нәтижесі тек пайдаланушының браузерінде сақталады.</div>
+      <div class="research-note"><strong>Деректер туралы:</strong> сайт жеке оқушының мәліметтерін жинамайды. Сабақ прогресі мен диагностика журналы тек пайдаланушының браузерінде сақталады.</div>
       <div class="hero-actions"><a class="btn btn-primary" href="#path">Курсты ашу</a><a class="btn btn-secondary" href="#diagnostics">Біліміңді тексер</a></div>
     </div></section>
   `, "project-page");
@@ -609,7 +648,7 @@ function startDiagnostic(lang = "kk") {
       topic: lang === "kk" ? stage.titleKk : stage.titleRu
     }));
   });
-  appState.diagnostic = { lang, questions, index: 0, correct: 0, answers: [], finished: false };
+  appState.diagnostic = { lang, questions, index: 0, correct: 0, answers: [], selectedAnswers: [], finished: false };
   renderDiagnosticQuestion();
 }
 
@@ -619,6 +658,7 @@ function answerDiagnostic(answer) {
   const current = session.questions[session.index];
   const correct = answer === current.answer;
   session.answers.push(correct);
+  session.selectedAnswers.push(answer);
   if (correct) session.correct++;
   document.querySelectorAll(".diagnostic-answer").forEach(button => {
     button.disabled = true;
@@ -635,9 +675,61 @@ function nextDiagnosticQuestion() {
   session.index++;
   if (session.index >= session.questions.length) {
     session.finished = true;
-    saveJson(diagnosticKey, { lang: session.lang, percent: Math.round(session.correct / session.questions.length * 100), correct: session.correct, date: new Date().toLocaleDateString("kk-KZ") });
+    const history = readDiagnosticHistory();
+    const record = createDiagnosticRecord(session, history);
+    session.result = record;
+    saveJson(diagnosticKey, record);
+    saveJson(diagnosticHistoryKey, [...history, record].slice(-30));
     renderDiagnosticResult();
   } else renderDiagnosticQuestion();
+}
+
+function readDiagnosticHistory() {
+  const history = readJson(diagnosticHistoryKey, []);
+  return Array.isArray(history) ? history.filter(item => item && typeof item.percent === "number" && ["kk", "ru"].includes(item.lang)) : [];
+}
+
+function createDiagnosticRecord(session, history = readDiagnosticHistory()) {
+  const kk = session.lang === "kk";
+  const percent = Math.round(session.correct / session.questions.length * 100);
+  const previous = [...history].reverse().find(item => item.lang === session.lang);
+  const profile = getProfile();
+  const stats = data.stages.map(stage => {
+    const indexes = session.questions.map((item, index) => item.stage === stage.id ? index : -1).filter(index => index >= 0);
+    const correct = indexes.filter(index => session.answers[index]).length;
+    return {
+      stage: stage.id,
+      title: kk ? stage.titleKk : stage.titleRu,
+      correct,
+      total: indexes.length,
+      percent: indexes.length ? Math.round(correct / indexes.length * 100) : 0
+    };
+  });
+  const mistakes = session.questions.reduce((items, question, index) => {
+    if (session.answers[index]) return items;
+    items.push({
+      stage: question.stage,
+      topic: question.topic,
+      question: question.question,
+      selectedAnswer: session.selectedAnswers?.[index] || "",
+      correctAnswer: question.answer
+    });
+    return items;
+  }, []);
+  return {
+    id: `${Date.now()}-${session.lang}`,
+    createdAt: new Date().toISOString(),
+    date: new Date().toLocaleDateString(kk ? "kk-KZ" : "ru-RU"),
+    student: profile?.name || (kk ? "Оқушы" : "Ученик"),
+    lang: session.lang,
+    percent,
+    correct: session.correct,
+    total: session.questions.length,
+    previousPercent: previous?.percent ?? null,
+    change: previous ? percent - previous.percent : 0,
+    stats,
+    mistakes
+  };
 }
 
 function translateCurrent() {
