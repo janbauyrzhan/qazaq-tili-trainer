@@ -230,5 +230,7 @@
     }
   }
 
-  window.APP_DATA = { lessons, stages, diagnostics, dictionary, sources };
+  const appData = { lessons, stages, diagnostics, dictionary, sources };
+  if (typeof window !== "undefined") window.APP_DATA = appData;
+  if (typeof module !== "undefined") module.exports = appData;
 })();

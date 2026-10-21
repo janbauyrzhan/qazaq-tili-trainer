@@ -1,0 +1,5 @@
+{
+  "functions": {
+    "api/chat.mjs": { "maxDuration": 30 }
+  }
+}

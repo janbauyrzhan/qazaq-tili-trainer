@@ -241,7 +241,7 @@ function renderLesson(lang, stageId, number, testing = false) {
     `}
     </div>${teacherChatMarkup(current, lang)}</div></section>`, "lesson-page");
   if (testing) renderTestPanel(current, lang, stage.id, n);
-  initializeTeacherChat(base, lang);
+  initializeTeacherChat(base, lang, testing);
 }
 
 const teacherConversations = new Map();
@@ -254,7 +254,7 @@ function teacherChatMarkup(lesson, lang) {
   return `<aside class="teacher-chat" aria-labelledby="teacher-title" lang="${lang}">
     <div class="teacher-header">
       <span class="teacher-avatar" aria-hidden="true">✦</span>
-      <div><h2 id="teacher-title">${kk ? "ЖИ мұғалім" : "ИИ-учитель"}</h2><span class="teacher-status">${kk ? "Жақында қосылады" : "Скоро подключим"}</span></div>
+      <div><h2 id="teacher-title">${kk ? "ЖИ мұғалім" : "ИИ-учитель"}</h2><span class="teacher-status">${kk ? "Қосылым тексерілуде…" : "Проверяем подключение…"}</span></div>
       <button class="teacher-toggle" type="button" aria-expanded="true" aria-controls="teacher-body" aria-label="${kk ? "Чатты жинау" : "Свернуть чат"}">−</button>
     </div>
     <div id="teacher-body">
@@ -266,79 +266,127 @@ function teacherChatMarkup(lesson, lang) {
         <textarea id="teacher-question" rows="3" maxlength="800" placeholder="${kk ? "Не түсініксіз болды?" : "Что осталось непонятным?"}" aria-describedby="teacher-api-note"></textarea>
         <div class="teacher-form-actions"><button class="teacher-clear" type="button">${kk ? "Тазалау" : "Очистить"}</button><button class="btn btn-primary btn-small" type="submit" disabled>${kk ? "Жіберу" : "Отправить"} ↑</button></div>
       </form>
-      <p id="teacher-api-note" class="teacher-api-note">${kk ? "Әзірге чаттың интерфейсі ғана дайын. ЖИ қосылмаған: сұрақтар серверге жіберілмейді, жауап берілмейді." : "Пока готов только интерфейс. ИИ не подключён: вопросы не отправляются на сервер, ответы недоступны."}</p>
+      <p id="teacher-api-note" class="teacher-api-note">${kk ? "Сұрақ, осы сабақтағы чат тарихы және сабақ тақырыбы Google Gemini-ге жіберіледі. Жеке деректерді жазба. ЖИ қателесуі мүмкін." : "Вопрос, история чата этого урока и тема передаются Google Gemini. Не указывай личные данные. ИИ может ошибаться."}</p>
     </div>
   </aside>`;
 }
 
-function initializeTeacherChat(key, lang) {
+function initializeTeacherChat(key, lang, testing) {
   const kk = lang === "kk";
   if (!teacherConversations.has(key)) {
     if (teacherConversations.size >= 32) teacherConversations.delete(teacherConversations.keys().next().value);
-    teacherConversations.set(key, { messages: [], draft: "" });
+    teacherConversations.set(key, { messages: [], draft: "", pending: false });
   }
   const conversation = teacherConversations.get(key);
   const chat = document.querySelector(".teacher-chat");
   const log = chat.querySelector(".teacher-messages");
   const input = chat.querySelector("textarea");
   const submit = chat.querySelector('[type="submit"]');
+  const status = chat.querySelector(".teacher-status");
   const welcome = kk
-    ? "Сәлем! Бұл жерде сабақ бойынша сұрақ қоя аласың. ЖИ-ді кейін қосамыз — әзірге жауап беру қолжетімсіз."
-    : "Привет! Здесь можно будет задавать вопросы по уроку. ИИ подключим позже — пока ответы недоступны.";
+    ? "Сәлем! Сабақ бойынша не түсініксіз болды? Бірге талдап көрейік."
+    : "Привет! Что осталось непонятным в уроке? Давай разберёмся вместе.";
+  const errors = {
+    NOT_CONFIGURED: kk ? "ЖИ әлі бапталмаған. Сайт иесі қосылымды аяқтауы керек." : "ИИ ещё не настроен. Владельцу сайта нужно завершить подключение.",
+    CONFIG_ERROR: kk ? "ЖИ қосылымында мәселе бар. Сайт иесіне хабарла." : "Не удалось подключиться к ИИ. Сообщи владельцу сайта.",
+    RATE_LIMITED: kk ? "Сұрақтар лимитіне жеттік. Біраздан кейін қайталап көр." : "Достигнут лимит запросов. Попробуй немного позже.",
+    TIMEOUT: kk ? "Жауап кешігіп жатыр. Қайта жіберіп көр." : "Ответ задерживается. Попробуй отправить вопрос ещё раз.",
+    BLOCKED: kk ? "Бұл сұраққа жауап алу мүмкін болмады. Оны сабақ тақырыбы бойынша басқаша жаз." : "Не удалось получить ответ. Переформулируй вопрос по теме урока.",
+    INCOMPLETE: kk ? "Толық жауап келмеді. Сұрақты қысқартып, қайта жібер." : "Ответ не завершён. Сократи вопрос и попробуй снова.",
+    UNAVAILABLE: kk ? "Қазір жауап алу мүмкін емес. Интернетті тексеріп, кейін қайтала." : "Сейчас ответ недоступен. Проверь интернет и попробуй позже."
+  };
   function bubble(text, role) {
     const item = document.createElement("div");
     item.className = `teacher-message teacher-message-${role}`;
     const label = document.createElement("span");
-    label.textContent = role === "user" ? (kk ? "Сен" : "Ты") : (kk ? "Хабарлама" : "Уведомление");
+    label.textContent = role === "user" ? (kk ? "Сен" : "Ты") : role === "assistant" ? (kk ? "ЖИ мұғалім" : "ИИ-учитель") : (kk ? "Хабарлама" : "Уведомление");
     const content = document.createElement("p");
     content.textContent = text;
     item.append(label, content);
     log.append(item);
   }
-  function renderHistory() {
+  function refresh() {
+    if (!chat.isConnected) return;
     log.replaceChildren();
     bubble(welcome, "notice");
     conversation.messages.forEach(item => bubble(item.text, item.role));
+    if (conversation.pending) bubble(kk ? "Жауап дайындалуда…" : "Готовлю ответ…", "notice");
+    log.setAttribute("aria-busy", String(conversation.pending));
     log.scrollTop = log.scrollHeight;
+    input.value = conversation.draft;
+    input.disabled = conversation.pending;
+    submit.disabled = conversation.pending || !input.value.trim();
+    chat.querySelectorAll(".teacher-suggestion").forEach(button => button.disabled = conversation.pending);
   }
+  conversation.refresh = refresh;
+  refresh();
+  fetch("/api/chat", { signal: AbortSignal.timeout(6000), cache: "no-store" })
+    .then(response => response.ok ? response.json() : Promise.reject())
+    .then(result => { status.textContent = result.available ? "Gemini" : (kk ? "Қосылуы күтілуде" : "Ожидает подключения"); })
+    .catch(() => { status.textContent = kk ? "Қосылым қолжетімсіз" : "Подключение недоступно"; });
   function updateDraft() {
     conversation.draft = input.value;
-    submit.disabled = !input.value.trim();
+    submit.disabled = conversation.pending || !input.value.trim();
   }
-  renderHistory();
-  input.value = conversation.draft;
-  updateDraft();
   input.addEventListener("input", updateDraft);
   chat.querySelectorAll(".teacher-suggestion").forEach(button => button.addEventListener("click", () => {
     input.value = button.textContent;
-    updateDraft();
-    input.focus();
+    updateDraft(); input.focus();
   }));
-  chat.querySelector("#teacher-form").addEventListener("submit", event => {
+  chat.querySelector("#teacher-form").addEventListener("submit", async event => {
     event.preventDefault();
     const question = input.value.trim().slice(0, 800);
-    if (!question) return;
-    conversation.messages.push({ role: "user", text: question }, { role: "notice", text: kk
-      ? "ЖИ әлі қосылмаған. Сұрағың ешқайда жіберілген жоқ. Кейін қайта сұрауың керек болады; қазір сабақ конспектіне сүйен."
-      : "ИИ ещё не подключён. Вопрос никуда не отправлен. После подключения его нужно будет задать заново; пока обратись к конспекту урока." });
-    conversation.messages = conversation.messages.slice(-20);
-    input.value = "";
-    updateDraft();
-    renderHistory();
-    input.focus();
+    if (!question || conversation.pending) return;
+    const history = [];
+    for (let i = 0; i < conversation.messages.length - 1; i++) {
+      const user = conversation.messages[i], answer = conversation.messages[i + 1];
+      if (user.role === "user" && answer.role === "assistant") history.push(user, answer);
+    }
+    const controller = new AbortController();
+    conversation.controller = controller;
+    conversation.pending = true;
+    conversation.messages.push({ role: "user", text: question });
+    conversation.draft = "";
+    refresh();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST", signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lessonKey: key, mode: testing ? "test" : "study", question, history: testing ? [] : history.slice(-6) })
+      });
+      const result = await response.json();
+      if (!response.ok || typeof result.answer !== "string" || !result.answer.trim()) throw new Error(result.error || "UNAVAILABLE");
+      if (conversation.controller !== controller) return;
+      conversation.messages.push({ role: "assistant", text: result.answer });
+      status.textContent = "Gemini";
+    } catch (error) {
+      if (conversation.controller !== controller) return;
+      const code = error.name === "AbortError" ? "TIMEOUT" : error.message;
+      conversation.messages.push({ role: "notice", text: errors[code] || errors.UNAVAILABLE });
+      conversation.draft = question;
+    } finally {
+      clearTimeout(timer);
+      if (conversation.controller === controller) {
+        conversation.pending = false;
+        conversation.controller = null;
+        conversation.messages = conversation.messages.slice(-20);
+        conversation.refresh?.();
+      }
+    }
   });
   input.addEventListener("keydown", event => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-      event.preventDefault();
-      chat.querySelector("#teacher-form").requestSubmit();
+      event.preventDefault(); chat.querySelector("#teacher-form").requestSubmit();
     }
   });
   chat.querySelector(".teacher-clear").addEventListener("click", () => {
+    conversation.controller?.abort();
+    conversation.controller = null;
+    conversation.pending = false;
     conversation.messages = [];
-    input.value = "";
-    updateDraft();
-    renderHistory();
-    input.focus();
+    conversation.draft = "";
+    refresh(); input.focus();
   });
   const toggle = chat.querySelector(".teacher-toggle");
   toggle.addEventListener("click", () => {
