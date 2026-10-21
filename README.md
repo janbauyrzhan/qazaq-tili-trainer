@@ -33,7 +33,7 @@
 1. Создать ключ в Google AI Studio: https://aistudio.google.com/api-keys
 2. Vercel → проект qazaq-tili-trainer → Settings → Environment Variables.
 3. Добавить GEMINI_API_KEY, значение — ключ, тип Secret (Sensitive), окружение Production. Не добавлять публичный префикс.
-4. Необязательно: GEMINI_MODEL, по умолчанию gemini-3.8-flash. Можно выбрать доступную для своего проекта модель с generateContent.
+4. Необязательно: GEMINI_MODEL, по умолчанию gemini-3.8-flash. Можно выбрать доступную для своего проекта модель с generateContent. При временной недоступности основной модели сервер пробует gemini-3.5-flash-lite.
 5. Сделать Redeploy. Проверить GET /api/chat: available должен стать true, затем задать вопрос в уроке.
 
 Без ключа сервер возвращает NOT_CONFIGURED; фиктивных ответов нет. Проверка available означает наличие конфигурации, а не валидность ключа или наличие квоты. Локальные секреты держать в .env.local (игнорируется Git); пример имён переменных — .env.example. Статический Python-сервер не запускает API: для полного приложения использовать vercel dev.
